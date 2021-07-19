@@ -93,19 +93,19 @@ local PRONOUNS = {
 
     ["sa"]  = {"any", "nominative"},
     ["ga"]  = {"all", "nominative"},
-    ["ba"]  = {"each", "nominative"},
+    ["ma"]  = {"each", "nominative"},
 
     -- assertive pronouns
 
-    ["osa"]  = {"assert any", "nominative"},
-    ["oga"]  = {"assert all", "nominative"},
-    ["oba"]  = {"assert each", "nominative"},
+    ["asa"]  = {"assert any", "nominative"},
+    ["aga"]  = {"assert all", "nominative"},
+    ["ama"]  = {"assert each", "nominative"},
 
     -- interrogative pronouns
 
     ["esa"]  = {"query any", "nominative"},
     ["ega"]  = {"query all", "nominative"},
-    ["eba"]  = {"query each", "nominative"}
+    ["ema"]  = {"query each", "nominative"}
 }
 
 local function conjugate_pronouns(pronouns)

@@ -20,6 +20,15 @@ control.is_throw = function(ctl)
     return ctl[1] == TAG_THROW
 end
 
+local function keys_iter(state, index)
+    local key = next(state, index)
+    return key, key
+end
+
+control.keys = function(t)
+    return {TAG_DELAY, keys_iter, t}
+end
+
 local function map_iter(state, index)
     local inner_iterator = state[1]
     local inner_state = state[2]
@@ -27,7 +36,9 @@ local function map_iter(state, index)
 
     local value
     index, value = inner_iterator(inner_state, index)
-    return index, mapper(value)
+    if index ~= nil then
+        return index, mapper(value)
+    end
 end
 
 control.map = function(ctl, mapper)

@@ -31,19 +31,19 @@ local PRONOUN_MAP = {
 
     ["s."] = {nil, "any"},
     ["g."] = {nil, "all"},
-    ["b."] = {nil, "each"},
+    ["m."] = {nil, "each"},
 
     -- assertive pronouns
 
-    ["os."] = {nil, "assert_any"},
-    ["og."] = {nil, "assert_all"},
-    ["ob."] = {nil, "assert_each"},
+    ["as."] = {nil, "assert_any"},
+    ["ag."] = {nil, "assert_all"},
+    ["am."] = {nil, "assert_each"},
 
     -- interrogative pronouns
 
     ["es."] = {nil, "query_any"},
     ["eg."] = {nil, "query_all"},
-    ["eb."] = {nil, "query_each"}
+    ["em."] = {nil, "query_each"}
 }
 
 local COMMAND_TYPES = {
