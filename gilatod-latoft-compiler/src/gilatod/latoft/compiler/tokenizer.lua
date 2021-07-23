@@ -242,7 +242,7 @@ local NOUN_POSTFIXES = {
     -- semantic role
 
     ["nt"] = {"role", "agent"},
-    ["fi"] = {"role", "patient"},
+    ["l"]  = {"role", "patient"},
     ["m"]  = {"role", "experiencer"},
     ["d"]  = {"role", "scene"},
     ["ft"] = {"role", "measure"},
@@ -697,4 +697,4 @@ tokenizer.read = function(source, location)
     }, source)
 end
 
-return tokenizer, state
+return tokenizer
