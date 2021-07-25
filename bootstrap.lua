@@ -40,18 +40,29 @@ local function show_result(iterator, state)
     end
 end
 
-run("Ma letam lata.")
--- 所有-主格 存在(静态无终持续体,主格)-经历者 存在(动态无终持续体,经验貌)-第三人称单数
--- 所有存在之物存在。
+local function decl_1()
+    run("Ma letam lata.")
+    -- 所有-主格 存在(静态无终持续体,主格)-经历者 存在(动态无终持续体,经验貌)-第三人称单数
+    -- 所有存在之物存在。
 
-run("Ae'a jata letam.")
--- 亚夜-主格 是(动态无终持续体,经验貌)-第三人称单数 存在(静态无终持续体,主格)-经历者
--- 亚夜是存在之物。
+    run("Ae'a jata letam.")
+    -- 亚夜-主格 是(动态无终持续体,经验貌)-第三人称单数 存在(静态无终持续体,主格)-经历者
+    -- 亚夜是存在之物。
 
-run("Sia'a jata letam.")
--- 西亚-主格 是(动态无终持续体,经验貌)-第三人称单数 存在(静态无终持续体,主格)-经历者
--- 西亚是存在之物。
+    run("Sia'a jata letam.")
+    -- 西亚-主格 是(动态无终持续体,经验貌)-第三人称单数 存在(静态无终持续体,主格)-经历者
+    -- 西亚是存在之物。
 
-show_result(run("Ema lata."))
--- 哪些-主格 存在(动态无终持续体,经验貌)-第三人称单数
--- 哪些事物存在？
+    show_result(run("Ema lata."))
+    -- 哪些-主格 存在(动态无终持续体,经验貌)-第三人称单数
+    -- 哪些事物存在？
+end
+
+local function decl_2()
+    run("Loemut Ae'a, latiselad jata bilatam.")
+    show_result(run("Asa latiselad jata bilatam."))
+    run("Ae'a loema.")
+    show_result(run("Asa latiselad jata bilatam."))
+end
+
+decl_2()

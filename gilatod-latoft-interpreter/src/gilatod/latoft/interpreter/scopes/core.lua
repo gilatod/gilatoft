@@ -22,10 +22,6 @@ local core = {}
 
 -- control flow
 
-core.id = function(env, exp)
-    return pure(exp[2])
-end
-
 core.seq = function(env, exp)
     local len = #exp
     for i = 2, len - 1 do
@@ -35,6 +31,10 @@ core.seq = function(env, exp)
         end
     end
     return evaluate(env, exp[len])
+end
+
+core.quote = function(env, exp)
+    return pure(exp[2])
 end
 
 -- predicate

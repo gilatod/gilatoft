@@ -64,26 +64,14 @@ local COMMAND_TYPES = {
     ["query_each"] = 3
 }
 
-local GRAMMATICAL_PREFIXES_MAP = {
-    ["before"] = "#before",
-    ["optional"] = "#optional",
-    ["parrallel"] = "#parrallel",
-    ["condition"] = "#condition",
-    ["reason"] = "#reason",
-    ["result"] = "#result",
-    ["purpose"] = "#purpose",
-    ["theme"] = "#theme",
-    ["synonym"] = "#synonym"
-}
-
 local ROLE_MAP = {
-    ["agent"] = "#agent",
-    ["patient"] = "#patient",
-    ["experiencer"] = "#experiencer",
-    ["scene"] = "#scene",
-    ["measure"] = "#measure",
-    ["outcome"] = "#outcome",
-    ["depletion"] = "#depletion"
+    ["agent"] = ":a",
+    ["patient"] = ":p",
+    ["experiencer"] = ":e",
+    ["scene"] = ":s",
+    ["measure"] = ":m",
+    ["outcome"] = ":o",
+    ["depletion"] = ":d"
 }
 
 local build_adjective_phrase
@@ -91,50 +79,26 @@ local build_gerund_phrase
 local build_adverbial_phrase
 
 local function build_simple_constraint(state, word)
-    local predicate, arguments
-    local detail = word.detail
-
-    if detail and detail[1] == "role" then
-        predicate = ROLE_MAP[detail[2]]
-        arguments = {a = word.root}
-    else
-        predicate = word.stem
+    local adverb_type = word.detail[2]
+    if adverb_type == "adjunct" then
+        return word.stem
+    else -- determinator
+        return {word.stem, {virtual = true}}
     end
-
-    local prefixes = word.grammatical_prefixes
-    if not prefixes then
-        return arguments
-            and {predicate, arguments} or predicate
-    end
-
-    local c = {}
-    for i = 1, #prefixes do
-        c[#c+1] = GRAMMATICAL_PREFIXES_MAP[prefixes[i]]
-    end
-
-    return {predicate, arguments, c}
 end
 
-local function build_constraints(state, grammatical_prefixes, adverbial)
-    local c
+local function build_constraints(state, adverbial)
+    if not adverbial then return nil end
 
-    if grammatical_prefixes then
-        c = {}
-        for i = 1, #grammatical_prefixes do
-            c[#c+1] = GRAMMATICAL_PREFIXES_MAP[grammatical_prefixes[i]]
-        end
-    end
+    local c = {}
 
-    if adverbial then
-        c = c or {}
-        for i = 1, #adverbial do
-            local comp = adverbial[i]
-            local comp_t = comp.type
-            if comp_t == "adverbial_phrase" then
-                c[#c+1] = build_adverbial_phrase(state, comp)
-            else
-                c[#c+1] = build_simple_constraint(state, comp[2])
-            end
+    for i = 1, #adverbial do
+        local comp = adverbial[i]
+        local comp_t = comp.type
+        if comp_t == "adverbial_phrase" then
+            c[#c+1] = build_adverbial_phrase(state, comp)
+        else
+            c[#c+1] = build_simple_constraint(state, comp[2])
         end
     end
 
@@ -164,12 +128,16 @@ local function build_argument(state, argument)
                     local meta = comp[1]
                     assembler_error(meta, "unrecognized pronoun '"..noun.raw.."'")
                 end
-
                 local tag = entry[1]
                 if tag then exp[#exp+1] = tag end
                 cmd = entry[2]
             else
-                exp[#exp+1] = build_simple_constraint(state, noun)
+                local detail = noun.detail
+                if detail and detail[1] == "role" then
+                    exp[#exp+1] = noun.root..ROLE_MAP[detail[2]]
+                else
+                    exp[#exp+1] = noun.stem
+                end
             end
         end
     end
@@ -192,8 +160,7 @@ local function raw_build_nonpredicative_phrase(state, phrase, head)
     end
 
     return {head.root, arguments,
-        build_constraints(
-            state, head.grammatical_prefixes, phrase.adverbial)}
+        build_constraints(state, phrase.adverbial)}
 end
 
 build_adjective_phrase = function(state, phrase)
@@ -202,8 +169,17 @@ build_adjective_phrase = function(state, phrase)
 end
 
 build_adverbial_phrase = function(state, phrase)
-    return raw_build_nonpredicative_phrase(
-        state, phrase, phrase.head[2])
+    local head = phrase.head[2]
+    local exp = raw_build_nonpredicative_phrase(
+        state, phrase, head)
+
+    local adverb_type = head.detail[2]
+    if adverb_type == "determinator" then
+        local arguments = exp[2]
+        arguments.virtual = true
+    end
+
+    return exp
 end
 
 local function raw_build_predicative_phrase(state, phrase, center)
@@ -233,27 +209,17 @@ local function raw_build_predicative_phrase(state, phrase, center)
         arguments = {n = n, a = a, d = d, g = g, o = o} 
     end
 
-    local grammatical_prefixes
     if center.type then
-        grammatical_prefixes = center.grammatical_prefixes
         center = center.root
     else
         for i = 1, #center do
             local pred = center[i]
-            local pred_prefixes = pred.grammatical_prefixes 
-            if pred_prefixes then
-                if grammatical_prefixes then
-                    error("multiple predicates with grammatical prefixes not allows")
-                end
-                grammatical_prefixes = pred_prefixes
-            end
             center[i] = pred.root
         end
     end
 
     return {cmd, center, arguments,
-        build_constraints(
-            state, grammatical_prefixes, phrase.adverbial)}
+        build_constraints(state, phrase.adverbial)}
 end
 
 build_gerund_phrase = function(state, phrase)

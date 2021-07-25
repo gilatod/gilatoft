@@ -144,18 +144,6 @@ local GRAMMATICAL_ASPECT_MARKS = {
     ["e"]  = "continuous"
 }
 
-local GRAMMATICAL_PREFIXES = {
-    ["pju"] = "before",
-    ["ji"] = "optional",
-    ["se"] = "parrallel",
-    ["me"] = "condition",
-    ["hi"] = "reason",
-    ["va"] = "result",
-    ["su"] = "purpose",
-    ["de"] = "theme",
-    ["vi"] = "synonym"
-}
-
 local LEXICAL_PREFIXES = {
     ["a"]    = "accomplished",
     ["ju"]   = "defective",
@@ -181,7 +169,16 @@ local LEXICAL_PREFIXES = {
     ["ca"]   = "separative",
     ["fla"]  = "transfering",
     ["la"]   = "forward",
-    ["ce"]   = "backward"
+    ["ce"]   = "backward",
+    ["pju"]  = "before",
+    ["si"]   = "optional",
+    ["se"]   = "parrallel",
+    ["me"]   = "condition",
+    ["hi"]   = "reason",
+    ["va"]   = "result",
+    ["su"]   = "purpose",
+    ["de"]   = "theme",
+    ["vi"]   = "synonym"
 }
 
 local GRAMMATICAL_POSTFIXES = {
@@ -199,23 +196,17 @@ local GRAMMATICAL_POSTFIXES = {
     ["su"] = {"predicative", "employment", 2},
     ["vu"] = {"predicative", "employment", 3},
 
-    ["ne"] = {"predicative", "active", 1, "cadence"},
-    ["se"] = {"predicative", "active", 2, "cadence"},
-    ["ve"] = {"predicative", "active", 3, "cadence"},
+    -- adjunct adverb
 
-    ["nie"] = {"predicative", "passive", 1, "cadence"},
-    ["sie"] = {"predicative", "passive", 2, "cadence"},
-    ["vie"] = {"predicative", "passive", 3, "cadence"},
+    ["f"]  = {"adverbial", "adjunct", "active"},
+    ["fi"] = {"adverbial", "adjunct", "passive"},
+    ["fu"] = {"adverbial", "adjunct", "employment"},
 
-    ["nue"] = {"predicative", "employment", 1, "cadence"},
-    ["sue"] = {"predicative", "employment", 2, "cadence"},
-    ["vue"] = {"predicative", "employment", 3, "cadence"},
+    -- determinator adverb
 
-    -- adverbial
-
-    ["t"]   = {"adverbial", "active"},
-    ["ten"] = {"adverbial", "passive"},
-    ["ti"]  = {"adverbial", "employment"}
+    ["t"]  = {"adverbial", "determinator", "active"},
+    ["ti"] = {"adverbial", "determinator", "passive"},
+    ["tu"] = {"adverbial", "determinator", "employment"}
 }
 
 local CASE_MARKS = {
@@ -229,14 +220,14 @@ local CASE_MARKS = {
 local NOUN_POSTFIXES = {
     -- infinitive verb
 
-    ["f"]  = {"adjective", "active"},
-    ["fi"] = {"adjective", "passive"},
-    ["fu"] = {"adjective", "employment"},
+    ["ns"]  = {"adjective", "active"},
+    ["nsi"] = {"adjective", "passive"},
+    ["nsu"] = {"adjective", "employment"},
 
     -- gerund
 
-    ["gn"]  = {"gerund", "active"},
-    ["gni"] = {"gerund", "passive"},
+    ["gn"]   = {"gerund", "active"},
+    ["gni"]  = {"gerund", "passive"},
     ["gnu"] = {"gerund", "employment"},
 
     -- semantic role
@@ -376,27 +367,6 @@ local function read_letters(state, source)
     end
 
     return #cs > 0 and char(unpack(cs))
-end
-
-local function get_grammatical_prefixes(state, str)
-    local prefixes
-    local start = 1
-
-    for index = start, #str do
-        if byte(str, index) == BYTE_ACCENT_MARK then
-            local prefix = sub(str, start, index - 1)
-            local desc = GRAMMATICAL_PREFIXES[prefix]
-            if desc then
-                if not prefixes then prefixes = {} end
-                prefixes[#prefixes+1] = desc
-                start = index + 1
-            else
-                return prefixes, sub(str, start)
-            end
-        end
-    end
-
-    return prefixes, sub(str, start)
 end
 
 local function calculate_stem_consonant_cluster_count(str)
@@ -565,12 +535,6 @@ local function read_token(state, source)
         return token
     end
 
-    local prefixes, rest = get_grammatical_prefixes(state, raw)
-    if prefixes then
-        w.grammatical_prefixes = prefixes
-        raw = rest
-    end
-    
     local postfix, desc = get_postfix(state, raw)
     if postfix then
         raw = sub(raw, 1, #raw - #postfix)

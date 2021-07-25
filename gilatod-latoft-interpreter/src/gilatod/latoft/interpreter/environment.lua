@@ -9,6 +9,8 @@ local map = control.map
 local iterate = control.iterate
 
 local EMPTY_TABLE = {}
+local MAIN_ARGUMENTS = {"n", "a", "d", "g", "o"}
+local MAIN_ARGUMENTS_COUNT = #MAIN_ARGUMENTS
 
 local environment = setmetatable({}, {
     __call = function(self, scope, store)
@@ -37,20 +39,28 @@ function environment:evaluate(value)
     return func(self, value)
 end
 
-function environment:apply_entity(entity, constraints)
+function environment:apply_constraints(entity, constraints)
     local declare = self.declare
 
     local ref_args_mt = {}
     local ref_args = setmetatable(
-        {n = {"id", entity}}, ref_args_mt)
+        {n = {"quote", entity}}, ref_args_mt)
 
     for i = 1, #constraints do
         local constraint = constraints[i]
         if type(constraint) == "table" then
             local predicate = constraint[1]
-            ref_args_mt.__index = constraint[2]
+            local arguments = constraint[2] or EMPTY_TABLE
             local decl_constraints = constraint[3]
-            declare(self, predicate, ref_args, decl_constraints)
+
+            if not arguments.virtual then
+                if arguments.n then
+                    declare(self, predicate, arguments, decl_constraints)
+                else
+                    ref_args_mt.__index = constraint[2]
+                    declare(self, predicate, ref_args, decl_constraints)
+                end
+            end
         else
             declare(self, constraint, ref_args)
         end
@@ -67,15 +77,29 @@ function environment:create_entity(constraints)
     local entity = setmetatable({}, entity_mt)
     self.entities[entity] = true
     if constraints then
-        self:apply_entity(entity, constraints)
+        self:apply_constraints(entity, constraints)
         local c = constraints[1]
         entity.name = type(c) == "string" and c or c[1]
     end
     return entity
 end
 
-local function check_arguments(env, decl_arguments, arguments)
-    for key, argument in pairs(arguments) do
+local function check_arguments(env, arguments, decl_arguments)
+    if not arguments then return true end
+    decl_arguments = decl_arguments or EMPTY_TABLE
+
+    local i = 0
+    local key, argument
+
+    while true do
+    ::continue::
+        if i > MAIN_ARGUMENTS_COUNT then break end
+        i = i + 1
+
+        key = MAIN_ARGUMENTS[i]
+        argument = arguments[key]
+        if not argument then goto continue end
+
         local decl_argument = decl_arguments[key]
         if not decl_argument then return false end
 
@@ -100,40 +124,38 @@ local function check_arguments(env, decl_arguments, arguments)
     return true
 end
 
-local function do_match(env, entity, predicate, arguments)
-    local entry = env.declarations[predicate]
-    if not entry then return nil end
-
+local function do_match(env, entity, predicate, arguments, constraints)
     local store = env.store
     local slot = store[predicate]
 
     if slot then
-        local decl = slot[entity]
-        if decl then
-            local decl_constraints = decl[3]
-            if not decl_constraints
-                or env:check_constraints(decl, decl_constraints) then
-                return decl
+        local declaration = slot[entity]
+        if declaration then
+            -- TODO: multiple memory
+            if check_arguments(env, arguments, declaration[2])
+                and env:check_constraints(declaration, declaration[3])
+                and env:check_constraints(declaration, constraints) then
+                return declaration
             end
-            slot[entity] = nil
         end
     end
+
+    local entry = env.declarations[predicate]
+    if not entry then return nil end
 
     local result
 
     if arguments then
         for declaration in pairs(entry) do
             local decl_arguments = declaration[2]
-            local nominative = decl_arguments.n
-            if nominative then
-                for _, decl_entity in iterate(env:evaluate(nominative)) do
-                    if decl_entity == entity and check_arguments(env, decl_arguments, arguments) then
-                        local decl_constraints = declaration[3]
-                        if not decl_constraints
-                            or env:check_constraints(declaration, decl_constraints) then
-                            result = declaration
-                            goto finish
-                        end
+            if decl_arguments and decl_arguments.n then
+                for _, decl_entity in iterate(env:evaluate(decl_arguments.n)) do
+                    if decl_entity == entity
+                        and check_arguments(env, arguments, decl_arguments)
+                        and env:check_constraints(declaration, declaration[3])
+                        and env:check_constraints(declaration, constraints) then
+                        result = declaration
+                        goto finish
                     end
                 end
             end
@@ -141,17 +163,14 @@ local function do_match(env, entity, predicate, arguments)
     else
         for declaration in pairs(entry) do
             local decl_arguments = declaration[2]
-            local nominative = decl_arguments.n
-            if nominative then
+            if decl_arguments and decl_arguments.n then
                 local success
-                for _, decl_entity in iterate(env:evaluate(nominative)) do
-                    if decl_entity == entity then
-                        local decl_constraints = declaration[3]
-                        if not decl_constraints
-                            or env:check_constraints(declaration, decl_constraints) then
-                            result = declaration
-                            goto finish
-                        end
+                for _, decl_entity in iterate(env:evaluate(decl_arguments.n)) do
+                    if decl_entity == entity
+                        and env:check_constraints(declaration, declaration[3])
+                        and env:check_constraints(declaration, constraints) then
+                        result = declaration
+                        goto finish
                     end
                 end
             end
@@ -164,7 +183,8 @@ local function do_match(env, entity, predicate, arguments)
 
     if not slot then
         slot = {}
-        self.store[predicate] = slot
+        -- TODO: multiple memory
+        store[predicate] = slot
     end
 
     slot[entity] = result
@@ -178,21 +198,27 @@ function environment:match(entity, constraint)
 
     local predicate = constraint[1]
     local arguments = constraint[2]
+    local sub_constraints = constraint[3]
+
+    if arguments and arguments.n then
+        return self:assert(predicate, arguments, sub_constraints)
+    end
 
     if type(predicate) == "table" then
         local t = {}
         for i = 1, #predicate do
-            if not do_match(self, entity, predicate[i], arguments) then
+            if not do_match(self, entity, predicate[i], arguments, sub_constraints) then
                 t[#t+1] = declaration
             end
         end
         return unpack(t)
     else
-        return do_match(self, entity, predicate, arguments)
+        return do_match(self, entity, predicate, arguments, sub_constraints)
     end
 end
 
 function environment:check_constraints(entity, constraints)
+    if not constraints then return true end
     for i = 1, #constraints do
         if not self:match(entity, constraints[i]) then
             return false
@@ -308,7 +334,7 @@ end
 
 function environment:declare(predicate, arguments, constraints)
     local declarations = self.declarations
-    local declaration = {predicate, arguments or EMPTY_TABLE, constraints}
+    local declaration = {predicate, arguments, constraints}
     self.entities[declaration] = true
 
     local entry = declarations[predicate]
@@ -334,39 +360,31 @@ function environment:declare(predicate, arguments, constraints)
     end
 
     if constraints then
-        self:apply_entity(declaration, constraints)
+        self:apply_constraints(declaration, constraints)
     end
 end
 
 function environment:assert(predicate, arguments, constraints)
     local entry = self.declarations[predicate]
-    if not entry then return false end
-    if not arguments then return true end
+    if not entry then return nil end
 
     local success, res = pcall(function()
         if constraints then
             for declaration in pairs(entry) do
-                if check_arguments(self, declaration[2], arguments) then
-                    local success = true
-                    for i = 1, #constraints do
-                        if not self:match(declaration, constraints[i]) then
-                            success = false
-                            break
-                        end
-                    end
-                    if success then
-                        return true
-                    end
+                if check_arguments(self, arguments, declaration[2])
+                    and self:check_constraints(declaration, declaration[3])
+                    and self:check_constraints(declaration, constraints) then
+                    return declaration
                 end
             end
         else
             for declaration in pairs(entry) do
-                if check_arguments(self, declaration[2], arguments) then
-                    return true
+                if check_arguments(self, arguments, declaration[2])
+                    and self:check_constraints(declaration, declaration[3]) then
+                    return declaration
                 end
             end
         end
-        return false
     end)
 
     return success and res
@@ -380,7 +398,7 @@ end
 
 function environment:query(predicate, arguments, constraints)
     local entry = self.declarations[predicate]
-    if not entry or not arguments then return nil end
+    if not entry then return nil end
 
     local collections = self.collections
     local collection = {}
@@ -390,7 +408,7 @@ function environment:query(predicate, arguments, constraints)
 
     if constraints then
         for declaration in pairs(entry) do
-            if check_arguments(self, declaration[2], arguments)
+            if check_arguments(self, arguments, declaration[2])
                 and self:check_constraints(declaration, declaration[3])
                 and self:check_constraints(declaration, constraints) then
                 for i = 1, #collection do
@@ -401,9 +419,8 @@ function environment:query(predicate, arguments, constraints)
         end
     else
         for declaration in pairs(entry) do
-            if check_arguments(self, declaration[2], arguments)
-                and (not declaration[3]
-                    or self:check_constraints(declaration, declaration[3])) then
+            if check_arguments(self, arguments, declaration[2])
+                and self:check_constraints(declaration, declaration[3]) then
                 for i = 1, #collection do
                     result[#result+1] = collection[i]
                 end
