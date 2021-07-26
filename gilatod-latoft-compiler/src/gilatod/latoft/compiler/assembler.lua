@@ -13,12 +13,12 @@ end
 local PRONOUN_MAP = {
     -- personal pronouns
 
-    ["v."]  = {"#v", "any"},
-    ["iv."] = {"#v", "all"},
-    ["n."]  = {"#n", "any"},
-    ["in."] = {"#n", "all"},
-    ["l."]  = {"#l", "any"},
-    ["il."] = {"#l", "all"},
+    ["v."]  = {"#1", "any"},
+    ["iv."] = {"#1", "all"},
+    ["n."]  = {"#2", "any"},
+    ["in."] = {"#2", "all"},
+    ["l."]  = {"#3", "any"},
+    ["il."] = {"#3", "all"},
 
     -- demonstrative pronouns
 
@@ -44,6 +44,10 @@ local PRONOUN_MAP = {
     ["es."] = {nil, "query_any"},
     ["eg."] = {nil, "query_all"},
     ["em."] = {nil, "query_each"}
+}
+
+local PERSON_MAP = {
+    "#1", "#2", "#3"
 }
 
 local COMMAND_TYPES = {
@@ -147,13 +151,18 @@ local function build_argument(state, argument)
 end
 
 local function raw_build_nonpredicative_phrase(state, phrase, head)
+    local nominative = build_argument(state, phrase.nominative)
     local arguments = {
-        n = build_argument(state, phrase.nominative),
+        n = nominative,
         a = build_argument(state, phrase.accusative),
         d = build_argument(state, phrase.dative),
         g = build_argument(state, phrase.genitive),
         o = build_argument(state, phrase.oblique)
     }
+
+    if nominative then
+        nominative[#nominative+1] = "#3"
+    end
 
     if not next(arguments) then
         arguments = nil
@@ -190,6 +199,13 @@ local function raw_build_predicative_phrase(state, phrase, center)
     local d = build_argument(state, phrase.dative)
     local g = build_argument(state, phrase.genitive)
     local o = build_argument(state, phrase.oblique)
+
+    local person = PERSON_MAP[center.detail[3]]
+    if n then
+        n[#n+1] = person
+    else
+        n = {"realize", person}
+    end
 
     local cmd_t = 0
     if n then cmd_t = max(cmd_t, COMMAND_TYPES[n[1]]) end

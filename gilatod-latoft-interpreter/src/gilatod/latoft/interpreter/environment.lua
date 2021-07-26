@@ -15,7 +15,7 @@ local MAIN_ARGUMENTS_COUNT = #MAIN_ARGUMENTS
 local environment = setmetatable({}, {
     __call = function(self, scope, store)
         local instance = {
-            entities = {},
+            max_slot_size = 32,
             scope = scope or {},
             store = store or {},
             declarations = {},
@@ -39,34 +39,6 @@ function environment:evaluate(value)
     return func(self, value)
 end
 
-function environment:apply_constraints(entity, constraints)
-    local declare = self.declare
-
-    local ref_args_mt = {}
-    local ref_args = setmetatable(
-        {n = {"quote", entity}}, ref_args_mt)
-
-    for i = 1, #constraints do
-        local constraint = constraints[i]
-        if type(constraint) == "table" then
-            local predicate = constraint[1]
-            local arguments = constraint[2] or EMPTY_TABLE
-            local decl_constraints = constraint[3]
-
-            if not arguments.virtual then
-                if arguments.n then
-                    declare(self, predicate, arguments, decl_constraints)
-                else
-                    ref_args_mt.__index = constraint[2]
-                    declare(self, predicate, ref_args, decl_constraints)
-                end
-            end
-        else
-            declare(self, constraint, ref_args)
-        end
-    end
-end
-
 local entity_mt = {
     __tostring = function(e)
         return e.name or "entity: "..e
@@ -75,7 +47,6 @@ local entity_mt = {
 
 function environment:create_entity(constraints)
     local entity = setmetatable({}, entity_mt)
-    self.entities[entity] = true
     if constraints then
         self:apply_constraints(entity, constraints)
         local c = constraints[1]
@@ -92,7 +63,7 @@ local function check_arguments(env, arguments, decl_arguments)
     local key, argument
 
     while true do
-    ::continue::
+        ::continue::
         if i > MAIN_ARGUMENTS_COUNT then break end
         i = i + 1
 
@@ -124,26 +95,105 @@ local function check_arguments(env, arguments, decl_arguments)
     return true
 end
 
-local function do_match(env, entity, predicate, arguments, constraints)
-    local store = env.store
-    local slot = store[predicate]
+local function match_store(env, entity, predicate, arguments, constraints)
+    local queue = env.store[predicate]
+    if not queue then return nil end
 
-    if slot then
-        local declaration = slot[entity]
-        if declaration then
-            -- TODO: multiple memory
-            if check_arguments(env, arguments, declaration[2])
-                and env:check_constraints(declaration, declaration[3])
-                and env:check_constraints(declaration, constraints) then
-                return declaration
-            end
+    local max_slot_size = env.max_slot_size
+    for i = queue.rear, queue.front, -1 do
+        if i == 0 then
+            i = max_slot_size
+        end
+
+        local entry = queue[i]
+        local target_entity = entry[1]
+        local declaration = entry[2]
+
+        if target_entity == entity
+            and check_arguments(env, arguments, declaration[2])
+            and env:check_constraints(declaration, declaration[3])
+            and env:check_constraints(declaration, constraints) then
+            return declaration
         end
     end
+end
+
+local function raw_record_store(env, queue, entity, declaration)
+    local max_slot_size = env.max_slot_size
+
+    local front = queue.front
+    local rear = (queue.rear + 1) % max_slot_size
+    queue[rear] = {entity, declaration}
+    queue.rear = rear
+    
+    if rear == front then
+        front = (front + 1) % max_slot_size
+    elseif front == 0 then
+        front = 1
+    end
+
+    queue.front = front
+    queue.rear = rear
+end
+
+local function record_store(env, entity, predicate, declaration)
+    local store = env.store
+    local queue = store[predicate]
+    if not queue then
+        queue = {front = 0, rear = 0}
+        store[predicate] = queue
+    end
+    raw_record_store(env, queue, entity, declaration)
+end
+
+local function multi_record_store(env, entities, predicate, declaration)
+    local store = env.store
+    local queue = store[predicate]
+    if not queue then
+        queue = {front = 0, rear = 0}
+        store[predicate] = queue
+    end
+    for entity in iterate(entities) do
+        raw_record_store(env, queue, entity, declaration)
+    end
+end
+
+function environment:apply_constraint(entity, constraint)
+    if type(constraint) == "table" then
+        local predicate = constraint[1]
+        local arguments = constraint[2] or EMPTY_TABLE
+        local subconstraints = constraint[3]
+
+        if not arguments.virtual then
+            local nominative = arguments.n
+            if nominative then
+                multi_record_store(
+                    self, self:evaluate(nominative), predicate, constraint)
+            else
+                record_store(self, entity, predicate, constraint)
+            end
+            if subconstraints then
+                self:apply_constraints(constraint, subconstraints)
+            end
+        end
+    else
+        record_store(self, entity, constraint, {constraint})
+    end
+end
+
+function environment:apply_constraints(entity, constraints)
+    for i = 1, #constraints do
+        self:apply_constraint(entity, constraints[i])
+    end
+end
+
+local function do_check_constraint(env, entity, predicate, arguments, constraints)
+    local result = match_store(
+        env, entity, predicate, arguments, constraints)
+    if result then return result end
 
     local entry = env.declarations[predicate]
     if not entry then return nil end
-
-    local result
 
     if arguments then
         for declaration in pairs(entry) do
@@ -178,106 +228,115 @@ local function do_match(env, entity, predicate, arguments, constraints)
     end
 
     ::finish::
-
     if not result then return nil end
 
-    if not slot then
-        slot = {}
-        -- TODO: multiple memory
-        store[predicate] = slot
-    end
-
-    slot[entity] = result
+    record_store(env, entity, predicate, declaration)
     return result
 end
 
-function environment:match(entity, constraint)
+function environment:check_constraint(entity, constraint)
     if type(constraint) == "string" then
-        return do_match(self, entity, constraint)
+        return do_check_constraint(self, entity, constraint)
     end
 
     local predicate = constraint[1]
     local arguments = constraint[2]
-    local sub_constraints = constraint[3]
+    local subconstraints = constraint[3]
 
     if arguments and arguments.n then
-        return self:assert(predicate, arguments, sub_constraints)
+        return self:assert(predicate, arguments, subconstraints)
     end
 
     if type(predicate) == "table" then
         local t = {}
         for i = 1, #predicate do
-            if not do_match(self, entity, predicate[i], arguments, sub_constraints) then
+            if not do_check_constraint(
+                self, entity, predicate[i], arguments, subconstraints) then
                 t[#t+1] = declaration
             end
         end
         return unpack(t)
     else
-        return do_match(self, entity, predicate, arguments, sub_constraints)
+        return do_check_constraint(
+            self, entity, predicate, arguments, subconstraints)
     end
 end
 
 function environment:check_constraints(entity, constraints)
     if not constraints then return true end
     for i = 1, #constraints do
-        if not self:match(entity, constraints[i]) then
+        if not self:check_constraint(entity, constraints[i]) then
             return false
         end
     end
     return true
 end
 
-local function select_iter(state, index)
-    local env = state[1]
-    local constraints = state[2]
-    local slots = state[3]
+local function make_entity_iterator(handler)
+    return function(state, index)
+        local env = state[1]
+        local constraints = state[2]
+        local queues = state[3]
 
-    local curr_index
-    local entity
-    local found_entities
+        local curr_queue_index
+        local curr_entry_index
+        local found_entities
 
-    if index then
-        curr_index = index[1]
-        entity = index[2]
-        found_entities = index[3]
-    else
-        curr_index = 1
-        found_entities = {}
-    end
+        if index then
+            curr_queue_index = index[1]
+            curr_entry_index = index[2]
+            found_entities = index[3]
+        else
+            curr_queue_index = 1
+            curr_entry_index = queues[1][1].rear
+            found_entities = {}
+        end
 
-    local curr_slot = slots[curr_index]
+        local pair = queues[curr_queue_index]
+        local curr_queue = pair[1]
+        local curr_constraint = pair[2]
 
-    while true do
-        ::next::
-        entity = next(curr_slot, entity)
+        local max_slot_size = env.max_slot_size
 
-        if not entity then
-            if curr_index >= #slots then
+        while true do
+            for i = curr_entry_index, curr_queue.front, -1 do
+                if i == 0 then i = max_slot_size end
+                entity = curr_queue[i][1]
+                if not found_entities[entity] then
+                    found_entities[entity] = true
+                    if handler(env, entity, curr_constraint, constraints) then
+                        return {curr_queue_index, i, found_entities}, entity
+                    end
+                end
+            end
+
+            if curr_queue_index >= #queues then
                 return nil
             end
-            curr_index = curr_index + 1
-            curr_slot = slots[curr_index]
-            goto next
-        end
 
-        if found_entities[entity] then
-            goto next
+            curr_queue_index = curr_queue_index + 1
+            pair = queues[curr_queue_index]
+            curr_queue = pair[1]
+            curr_constraint = pair[2]
+            curr_entry_index = curr_queue.rear
         end
-        found_entities[entity] = true
-
-        for i = 1, #constraints do
-            if not env:match(entity, constraints[i]) then
-                goto next
-            end
-        end
-
-        return {curr_index, entity, found_entities}, entity
     end
 end
 
+local select_iter = make_entity_iterator(function(env, entity, curr_constraint, constraints)
+    for i = 1, #constraints do
+        local constraint = constraints[i]
+        if curr_constraint ~= constraint 
+            and not env:check_constraint(entity, constraints[i]) then
+            return false
+        end
+    end
+    return true
+end)
+
 local function wrap_entity_selector(env, iterator, constraints)
     local store = env.store
-    local slots = {}
+    local queues = {}
 
     for i = 1, #constraints do
         local constraint = constraints[i]
@@ -285,49 +344,42 @@ local function wrap_entity_selector(env, iterator, constraints)
             type(constraint) == "string"
             and constraint or constraint[1]
 
-        local slot = store[predicate]
-        if slot and next(slot) then
-            slots[#slots+1] = slot
+        local queue = store[predicate]
+        if queue and queue.front ~= 0 then
+            queues[#queues+1] = {queue, constraint}
         end
     end
-
-    if #slots == 0 then
-        return nil
-    end
-    return delay(iterator, {env, constraints, slots})
+    return #queues ~= 0
+        and delay(iterator, {env, constraints, queues})
+        or nil
 end
 
 function environment:select(...)
-    local constraints = {...}
-    if #constraints == 0 then
-        return keys(self.entities)
-    end
-    return wrap_entity_selector(self, select_iter, constraints)
+    return wrap_entity_selector(self, select_iter, {...})
 end
+
+local raw_realize_iter = make_entity_iterator(function(env, entity, curr_constraint, constraints)
+    if not env:check_constraint(entity, constraints[1]) then
+        return false
+    end
+    env:apply_constraints(entity, constraints)
+    return true
+end)
 
 local function realize_iter(state, index)
     if index == true then
         return nil
     end
 
-    local new_index, entity = select_iter(state, index)
+    local new_index, value = raw_realize_iter(state, index)
+    if new_index then return new_index, value end
+    if index then return nil end
 
-    if not new_index then
-        if not index then
-            entity = state[1]:create_entity(state[2])
-            return true, entity
-        end
-        return nil
-    end
-
-    return new_index, entity
+    return true, state[1]:create_entity(state[2])
 end
 
 function environment:realize(...)
     local constraints = {...}
-    if #constraints == 0 then
-        return pure(self:create_entity())
-    end
     return wrap_entity_selector(self, realize_iter, constraints)
         or pure(self:create_entity(constraints))
 end
@@ -335,7 +387,6 @@ end
 function environment:declare(predicate, arguments, constraints)
     local declarations = self.declarations
     local declaration = {predicate, arguments, constraints}
-    self.entities[declaration] = true
 
     local entry = declarations[predicate]
     if not entry then
@@ -344,23 +395,39 @@ function environment:declare(predicate, arguments, constraints)
     end
     entry[declaration] = true
 
-    if arguments then
-        local nominative = arguments.n
-        if nominative then
-            local store = self.store
-            local slot = store[predicate]
-            if not slot then
-                slot = {}
-                store[predicate] = slot
+    if constraints then
+        self:apply_constraints(declaration, constraints)
+    end
+
+    if arguments and arguments.n then
+        if constraints then
+            for i = 1, #constraints do
+                local constraint = constraints[i]
+                local arguments = constraint[2]
+                if arguments and arguments.virtual
+                    and not self:check_constraint(declaration, constraint) then
+                    goto skip
+                end
             end
-            for _, entity in iterate(self:evaluate(nominative)) do
-                slot[entity] = declaration
-            end
+        end
+        for _, entity in iterate(self:evaluate(arguments.n)) do
+            record_store(self, entity, predicate, declaration)
         end
     end
 
-    if constraints then
-        self:apply_constraints(declaration, constraints)
+    ::skip::
+    return declaration
+end
+
+function environment:undeclare_all(predicate)
+    local store = self.store
+    if store[predicate] then
+        store[predicate] = nil
+    end
+
+    local declarations = self.declarations
+    if declarations[predicate] then
+        declarations[predicate] =  nil
     end
 end
 

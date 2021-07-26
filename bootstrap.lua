@@ -59,10 +59,10 @@ local function decl_1()
 end
 
 local function decl_2()
-    run("Loemut Ae'a, latiselad jata bilatam.")
-    show_result(run("Asa latiselad jata bilatam."))
+    run("Loemut Ae'a, jata bilatom.")
+    show_result(run("Asa Ae'a jata bilatom."))
     run("Ae'a loema.")
-    show_result(run("Asa latiselad jata bilatam."))
+    show_result(run("Asa Ae'a jata bilatom."))
 end
 
 decl_2()
