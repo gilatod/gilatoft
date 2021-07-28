@@ -60,9 +60,13 @@ end
 
 local function decl_2()
     run("Loemut Ae'a, jata bilatom.")
+    -- 如果亚夜死了，（她）就是虚无的。
     show_result(run("Asa Ae'a jata bilatom."))
+    -- 亚夜是否是虚无的？
     run("Ae'a loema.")
-    show_result(run("Asa Ae'a jata bilatom."))
+    -- 亚夜死了。
+    show_result(run("Ae'a jata emo."))
+    -- 亚夜是否是虚无的？
 end
 
 decl_2()

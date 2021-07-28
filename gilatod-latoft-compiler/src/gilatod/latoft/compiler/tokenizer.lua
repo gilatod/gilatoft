@@ -527,14 +527,6 @@ local function read_token(state, source)
         return token
     end
 
-    local num = tonumber(raw)
-    if num then
-        w.type = "noun"
-        w.subtype = "number"
-        w.number = num
-        return token
-    end
-
     local postfix, desc = get_postfix(state, raw)
     if postfix then
         raw = sub(raw, 1, #raw - #postfix)

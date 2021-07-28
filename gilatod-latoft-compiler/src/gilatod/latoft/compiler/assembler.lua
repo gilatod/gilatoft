@@ -160,10 +160,6 @@ local function raw_build_nonpredicative_phrase(state, phrase, head)
         o = build_argument(state, phrase.oblique)
     }
 
-    if nominative then
-        nominative[#nominative+1] = "#3"
-    end
-
     if not next(arguments) then
         arguments = nil
     end
@@ -200,11 +196,10 @@ local function raw_build_predicative_phrase(state, phrase, center)
     local g = build_argument(state, phrase.genitive)
     local o = build_argument(state, phrase.oblique)
 
-    local person = PERSON_MAP[center.detail[3]]
     if n then
         n[#n+1] = person
     else
-        n = {"realize", person}
+        n = {"any", PERSON_MAP[center.detail[3]]}
     end
 
     local cmd_t = 0

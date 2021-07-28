@@ -45,16 +45,6 @@ local entity_mt = {
     end
 }
 
-function environment:create_entity(constraints)
-    local entity = setmetatable({}, entity_mt)
-    if constraints then
-        self:apply_constraints(entity, constraints)
-        local c = constraints[1]
-        entity.name = type(c) == "string" and c or c[1]
-    end
-    return entity
-end
-
 local function check_arguments(env, arguments, decl_arguments)
     if not arguments then return true end
     decl_arguments = decl_arguments or EMPTY_TABLE
@@ -64,8 +54,8 @@ local function check_arguments(env, arguments, decl_arguments)
 
     while true do
         ::continue::
-        if i > MAIN_ARGUMENTS_COUNT then break end
         i = i + 1
+        if i > MAIN_ARGUMENTS_COUNT then break end
 
         key = MAIN_ARGUMENTS[i]
         argument = arguments[key]
@@ -158,6 +148,31 @@ local function multi_record_store(env, entities, predicate, declaration)
     end
 end
 
+local EXIST_DECLARATION = {"j.t."}
+local SUBJECTIVE_DECLARATION = {"#3"}
+
+local function make_exist(env, entity, target)
+    record_store(env, entity, "j.t.", EXIST_DECLARATION)
+    record_store(env, entity, "#3", SUBJECTIVE_DECLARATION)
+end
+
+local function make_exist_categorized(env, entity, target, ...)
+    record_store(env, entity, "j.t.",
+        {"j.t.", {d = {"realize", ...}}})
+    record_store(env, entity, "#3", SUBJECTIVE_DECLARATION)
+end
+
+function environment:create_entity(constraints)
+    local entity = setmetatable({}, entity_mt)
+    if constraints then
+        self:apply_constraints(entity, constraints)
+        local c = constraints[1]
+        entity.name = type(c) == "string" and c or c[1]
+    end
+    make_exist(self, entity)
+    return entity
+end
+
 function environment:apply_constraint(entity, constraint)
     if type(constraint) == "table" then
         local predicate = constraint[1]
@@ -179,6 +194,8 @@ function environment:apply_constraint(entity, constraint)
     else
         record_store(self, entity, constraint, {constraint})
     end
+
+    make_exist_categorized(self, constraint, "#constraint")
 end
 
 function environment:apply_constraints(entity, constraints)
@@ -355,7 +372,11 @@ local function wrap_entity_selector(env, iterator, constraints)
 end
 
 function environment:select(...)
-    return wrap_entity_selector(self, select_iter, {...})
+    local constraints = {...}
+    if #constraints == 0 then
+        constraints[1] = "j.t."
+    end
+    return wrap_entity_selector(self, select_iter, constraints)
 end
 
 local raw_realize_iter = make_entity_iterator(function(env, entity, curr_constraint, constraints)
@@ -394,6 +415,8 @@ function environment:declare(predicate, arguments, constraints)
         declarations[predicate] = entry
     end
     entry[declaration] = true
+    
+    make_exist_categorized(self, declaration, "#declaration")
 
     if constraints then
         self:apply_constraints(declaration, constraints)
