@@ -15,7 +15,7 @@ local MAIN_ARGUMENTS_COUNT = #MAIN_ARGUMENTS
 local environment = setmetatable({}, {
     __call = function(self, scope, store)
         local instance = {
-            max_slot_size = 32,
+            max_slot_size = 2048,
             scope = scope or {},
             store = store or {},
             declarations = {},
@@ -85,29 +85,6 @@ local function check_arguments(env, arguments, decl_arguments)
     return true
 end
 
-local function match_store(env, entity, predicate, arguments, constraints)
-    local queue = env.store[predicate]
-    if not queue then return nil end
-
-    local max_slot_size = env.max_slot_size
-    for i = queue.rear, queue.front, -1 do
-        if i == 0 then
-            i = max_slot_size
-        end
-
-        local entry = queue[i]
-        local target_entity = entry[1]
-        local declaration = entry[2]
-
-        if target_entity == entity
-            and check_arguments(env, arguments, declaration[2])
-            and env:check_constraints(declaration, declaration[3])
-            and env:check_constraints(declaration, constraints) then
-            return declaration
-        end
-    end
-end
-
 local function raw_record_store(env, queue, entity, declaration)
     local max_slot_size = env.max_slot_size
 
@@ -148,18 +125,43 @@ local function multi_record_store(env, entities, predicate, declaration)
     end
 end
 
+local function match_store(env, entity, predicate, arguments, constraints)
+    local queue = env.store[predicate]
+    if not queue then return nil end
+
+    local max_slot_size = env.max_slot_size
+    for i = queue.rear, queue.front, -1 do
+        if i == 0 then
+            i = max_slot_size
+        end
+
+        local entry = queue[i]
+        local target_entity = entry[1]
+        local declaration = entry[2]
+
+        if target_entity == entity
+            and check_arguments(env, arguments, declaration[2])
+            and env:check_constraints(declaration, declaration[3])
+            and env:check_constraints(declaration, constraints) then
+            -- reinforce memory
+            raw_record_store(env, queue, entity, declaration)
+            return declaration
+        end
+    end
+end
+
 local EXIST_DECLARATION = {"j.t."}
-local SUBJECTIVE_DECLARATION = {"#3"}
+local OTHER_DECLARATION = {"#3"}
 
 local function make_exist(env, entity, target)
     record_store(env, entity, "j.t.", EXIST_DECLARATION)
-    record_store(env, entity, "#3", SUBJECTIVE_DECLARATION)
+    record_store(env, entity, "#3", OTHER_DECLARATION)
 end
 
 local function make_exist_categorized(env, entity, target, ...)
     record_store(env, entity, "j.t.",
         {"j.t.", {d = {"realize", ...}}})
-    record_store(env, entity, "#3", SUBJECTIVE_DECLARATION)
+    record_store(env, entity, "#3", OTHER_DECLARATION)
 end
 
 function environment:create_entity(constraints)
@@ -379,20 +381,12 @@ function environment:select(...)
     return wrap_entity_selector(self, select_iter, constraints)
 end
 
-local raw_realize_iter = make_entity_iterator(function(env, entity, curr_constraint, constraints)
-    if not env:check_constraint(entity, constraints[1]) then
-        return false
-    end
-    env:apply_constraints(entity, constraints)
-    return true
-end)
-
 local function realize_iter(state, index)
     if index == true then
         return nil
     end
 
-    local new_index, value = raw_realize_iter(state, index)
+    local new_index, value = select_iter(state, index)
     if new_index then return new_index, value end
     if index then return nil end
 

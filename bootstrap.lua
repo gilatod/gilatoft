@@ -65,7 +65,7 @@ local function decl_2()
     -- 亚夜是否是虚无的？
     run("Ae'a loema.")
     -- 亚夜死了。
-    show_result(run("Ae'a jata emo."))
+    show_result(run("Asa Ae'a jata bilatom."))
     -- 亚夜是否是虚无的？
 end
 
