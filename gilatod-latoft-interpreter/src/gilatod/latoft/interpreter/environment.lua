@@ -402,7 +402,7 @@ end
 function environment:select(...)
     local constraints = {...}
     if #constraints == 0 then
-        constraints[1] = "j.t."
+        constraints[1] = "#3"
     end
     return wrap_entity_selector(self, select_iter, constraints)
 end
@@ -427,7 +427,10 @@ end
 
 function environment:declare(predicate, arguments, constraints)
     local declarations = self.declarations
-    local declaration = {predicate, arguments, constraints}
+    local declaration = setmetatable({
+        predicate, arguments, constraints,
+        name = "declaration: "..predicate
+    }, entity_mt)
 
     local entry = declarations[predicate]
     if not entry then

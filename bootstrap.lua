@@ -69,4 +69,4 @@ local function decl_2()
     -- 亚夜是否是虚无的？
 end
 
-decl_1()
+decl_2()

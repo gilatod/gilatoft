@@ -66,13 +66,10 @@ core.assert = function(env, exp)
                 return pure(false)
             end
         end
+        return pure(true)
     else
-        if not env_assert(env, predicate, arguments, constraints) then
-            return pure(false)
-        end
+        return pure(env_assert(env, predicate, arguments, constraints))
     end
-
-    return pure(true)
 end
 
 core.query = function(env, exp)

@@ -218,7 +218,6 @@ local function raw_build_predicative_phrase(state, phrase, center)
         arguments = {n = n, a = a, d = d, g = g, o = o} 
     end
 
-
     local person
 
     if center.type then
@@ -239,7 +238,7 @@ local function raw_build_predicative_phrase(state, phrase, center)
     if n then
         n[#n+1] = person
     else
-        n = {"any", person}
+        arguments.n = {"any", person}
     end
 
     return {cmd, center, arguments,
