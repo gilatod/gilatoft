@@ -7,6 +7,8 @@ local is_throw = control.is_throw
 local pure = control.pure
 local delay = control.delay
 local throw = control.throw
+local unique = control.unique
+local join = control.join
 local first = control.first
 local group = control.group
 
@@ -73,45 +75,20 @@ core.assert = function(env, exp)
     return pure(true)
 end
 
-local function multi_iter(state, index)
-    index = index or {1}
-    local entry_index = index[1]
-
-    while true do
-        local entry = state[entry_index]
-        local sub_iterator = entry[1]
-        local sub_state = entry[2]
-        local key = index[2]
-
-        local value
-        key, value = sub_iterator(sub_state, key)
-
-        if key then
-            return {entry_index, key}, value
-        elseif entry_index == #state then
-            return nil
-        end
-
-        entry_index = entry_index + 1
-    end
-end
-
 core.query = function(env, exp)
     local predicate = exp[2]
     local arguments = exp[3]
     local constraints = exp[4]
 
     if type(predicate) == "table" then
-        local state = {}
+        -- TODO: iterator
+        local result = {}
         for i = 1, #predicate do
-            state[#state+1] = {query(env, predicate[i], arguments, constraints)}
+            result[#result+1] = query(env, predicate[i], arguments, constraints)
         end
-        return delay(multi_iter, state)
+        return unique(join(result))
     else
-        local iterator, state = query(env, predicate, arguments, constraints)
-        if iterator then
-            return delay(iterator, state)
-        end
+        return unique(query(env, predicate, arguments, constraints))
     end
 end
 
@@ -125,6 +102,8 @@ local function each(env, exp)
     return env_select(env, select(2, unpack(exp)))
 end
 
+core.each = each
+
 core.any = function(env, exp)
     return first(each(env, exp))
 end
@@ -132,8 +111,6 @@ end
 core.all = function(env, exp)
     return group(each(env, exp))
 end
-
-core.each = each
 
 core.assert_any = core.any
 core.assert_all = core.all

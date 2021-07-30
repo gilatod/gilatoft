@@ -45,6 +45,41 @@ local entity_mt = {
     end
 }
 
+local function check_argument(env, argument, decl_argument)
+    local head = decl_argument[1]
+
+    if head == "realize" or head == "each" then
+        local constraints = {select(2, unpack(decl_argument))}
+        for _, entity in iterate(env:evaluate(argument)) do
+            if not env:check_constraints(entity, constraints) then
+                local mt = getmetatable(entity)
+                if not mt or not mt.__latoft_optional then
+                    return false
+                end
+            end
+        end
+    else
+        local iterator, state = iterate(env:evaluate(decl_argument))
+        for _, entity in iterate(env:evaluate(argument)) do
+            local success
+            for _, decl_entity in iterator, state do
+                if entity == decl_entity then
+                    success = true
+                    break
+                end
+            end
+            if not success then
+                local mt = getmetatable(entity)
+                if not mt or not mt.__latoft_optional then
+                    return false
+                end
+            end
+        end
+    end
+
+    return true
+end
+
 local function check_arguments(env, arguments, decl_arguments)
     if not arguments then return true end
     decl_arguments = decl_arguments or EMPTY_TABLE
@@ -62,23 +97,9 @@ local function check_arguments(env, arguments, decl_arguments)
         if not argument then goto continue end
 
         local decl_argument = decl_arguments[key]
-        if not decl_argument then return false end
-
-        local iterator, state = iterate(env:evaluate(decl_argument))
-        for _, entity in iterate(env:evaluate(argument)) do
-            local success
-            for _, decl_entity in iterator, state do
-                if entity == decl_entity then
-                    success = true
-                    break
-                end
-            end
-            if not success then
-                local mt = getmetatable(entity)
-                if not mt or not mt.__latoft_optional then
-                    return false
-                end
-            end
+        if not decl_argument
+            or not check_argument(env, argument, decl_argument) then
+            return false
         end
     end
 
@@ -139,12 +160,12 @@ local function match_store(env, entity, predicate, arguments, constraints)
         local target_entity = entry[1]
         local declaration = entry[2]
 
-        if target_entity == entity
+        if entity == target_entity
             and check_arguments(env, arguments, declaration[2])
             and env:check_constraints(declaration, declaration[3])
             and env:check_constraints(declaration, constraints) then
             -- reinforce memory
-            raw_record_store(env, queue, entity, declaration)
+            raw_record_store(env, queue, target_entity, declaration)
             return declaration
         end
     end
@@ -159,6 +180,7 @@ local function make_exist(env, entity, target)
 end
 
 local function make_exist_categorized(env, entity, target, ...)
+    -- TODO: improve this
     record_store(env, entity, "j.t.",
         {"j.t.", {d = {"realize", ...}}})
     record_store(env, entity, "#3", OTHER_DECLARATION)
@@ -214,16 +236,19 @@ local function do_check_constraint(env, entity, predicate, arguments, constraint
     local entry = env.declarations[predicate]
     if not entry then return nil end
 
+    local result_entity
+
     if arguments then
         for declaration in pairs(entry) do
             local decl_arguments = declaration[2]
             if decl_arguments and decl_arguments.n then
                 for _, decl_entity in iterate(env:evaluate(decl_arguments.n)) do
-                    if decl_entity == entity
+                    if entity == decl_entity
                         and check_arguments(env, arguments, decl_arguments)
                         and env:check_constraints(declaration, declaration[3])
                         and env:check_constraints(declaration, constraints) then
                         result = declaration
+                        result_entity = decl_entity
                         goto finish
                     end
                 end
@@ -235,10 +260,11 @@ local function do_check_constraint(env, entity, predicate, arguments, constraint
             if decl_arguments and decl_arguments.n then
                 local success
                 for _, decl_entity in iterate(env:evaluate(decl_arguments.n)) do
-                    if decl_entity == entity
+                    if entity == decl_entity
                         and env:check_constraints(declaration, declaration[3])
                         and env:check_constraints(declaration, constraints) then
                         result = declaration
+                        result_entity = decl_entity
                         goto finish
                     end
                 end
@@ -249,7 +275,7 @@ local function do_check_constraint(env, entity, predicate, arguments, constraint
     ::finish::
     if not result then return nil end
 
-    record_store(env, entity, predicate, declaration)
+    record_store(env, result_entity, predicate, declaration)
     return result
 end
 
@@ -475,54 +501,68 @@ function environment:assert(predicate, arguments, constraints)
 end
 
 local function clear(t)
-    for i = 1, #t do
-        t[i] = nil
+    for k in pairs(t) do
+        t[k] = nil
     end
+end
+
+local function query_iter(state, index)
+    local env = state[1]
+    local entry = state[2]
+    local arguments = state[3]
+    local constraints = state[4]
+
+    local curr_declaration
+    local curr_collection
+    local curr_entity
+
+    if index then
+        curr_declaration = index[1]
+        curr_collection = index[2]
+        curr_entity = index[3]
+    else
+        curr_collection = {}
+        local collections = env.collections
+        collections[#collections+1] = curr_collection
+    end
+
+    if curr_entity then
+        curr_entity = next(curr_collection, curr_entity)
+        if curr_entity then
+            return {curr_declaration, curr_collection, curr_entity}, curr_entity
+        else
+            clear(curr_collection)
+        end
+    end
+
+    while true do
+        curr_declaration = next(entry, curr_declaration)
+        if not curr_declaration then
+            break
+        end
+        if check_arguments(env, arguments, curr_declaration[2])
+            and env:check_constraints(curr_declaration, curr_declaration[3])
+            and env:check_constraints(curr_declaration, constraints) then
+            curr_entity = next(curr_collection)
+            return {curr_declaration, curr_collection, curr_entity}, curr_entity
+        end
+    end
+
+    local collections = env.collections
+    collections[#collections] = nil
 end
 
 function environment:query(predicate, arguments, constraints)
     local entry = self.declarations[predicate]
     if not entry then return nil end
-
-    local collections = self.collections
-    local collection = {}
-    collections[#collections+1] = collection
-
-    local result = {}
-
-    if constraints then
-        for declaration in pairs(entry) do
-            if check_arguments(self, arguments, declaration[2])
-                and self:check_constraints(declaration, declaration[3])
-                and self:check_constraints(declaration, constraints) then
-                for i = 1, #collection do
-                    result[#result+1] = collection[i]
-                end
-            end
-            clear(collection)
-        end
-    else
-        for declaration in pairs(entry) do
-            if check_arguments(self, arguments, declaration[2])
-                and self:check_constraints(declaration, declaration[3]) then
-                for i = 1, #collection do
-                    result[#result+1] = collection[i]
-                end
-            end
-            clear(collection)
-        end
-    end
-
-    collections[#collections] = nil
-    return next, result
+    return delay(query_iter, {self, entry, arguments, constraints})
 end
 
 local collector_mt = {
     __latoft_optional = true,
-    __eq = function(o1, o2)
-        if o1.value == o2 then
-            local c = o1.collection
-            c[#c+1] = o2
+    __eq = function(e1, e2)
+        if e1.value == e2 then
+            e1.collection[e2] = true
             return true
         end
         return false

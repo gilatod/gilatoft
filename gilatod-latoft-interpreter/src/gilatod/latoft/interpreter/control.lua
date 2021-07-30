@@ -30,12 +30,12 @@ control.keys = function(t)
 end
 
 local function map_iter(state, index)
-    local inner_iterator = state[1]
+    local inner_iter = state[1]
     local inner_state = state[2]
     local mapper = state[3]
 
     local value
-    index, value = inner_iterator(inner_state, index)
+    index, value = inner_iter(inner_state, index)
     if index ~= nil then
         return index, mapper(value)
     end
@@ -53,6 +53,105 @@ control.map = function(ctl, mapper)
     else
         return ctl
     end
+end
+
+local function unique_iter(state, index)
+    local inner_iter = state[1]
+    local inner_state = state[2]
+
+    local last_value
+    local found_values
+
+    if index then
+        last_index = index[1]
+        found_values = index[2]
+    else
+        found_values = {}
+    end
+
+    local value
+    while true do
+        ::next::
+        last_index, value = inner_iter(inner_state, last_index)
+
+        if not last_index then
+            return nil
+        elseif found_values[value] then
+            goto next
+        end
+
+        found_values[value] = true
+        return {last_index, found_values}, value
+    end
+end
+
+control.unique = function(ctl)
+    if ctl == nil then return nil end
+    local head = ctl[1]
+    if head == TAG_PURE then
+        return ctl
+    elseif head == TAG_DELAY then
+        local iterator = ctl[2]
+        local state = ctl[3]
+        return {TAG_DELAY, unique_iter, {iterator, state}}
+    else
+        return ctl
+    end
+end
+
+local function join_iter(state, index)
+    local ctl_index
+    local ctl_inner_index
+
+    if index then
+        ctl_index = index[1]
+        ctl_inner_index = index[2]
+    else
+        ctl_index = 0
+    end
+
+    local ctl
+
+    if ctl_inner_index then
+        ctl = state[ctl_index]
+        local value
+        ctl_inner_index, value = ctl[2](ctl[3], ctl_inner_index)
+        if ctl_inner_index then
+            return {ctl_index, ctl_inner_index}, value
+        end
+    end
+
+    local head
+    while true do
+        ::next::
+        ctl_index = ctl_index + 1
+        if ctl_index > #state then
+            return nil
+        end
+
+        ctl = state[ctl_index]
+        head = ctl[1]
+
+        if head == TAG_PURE then
+            return {ctl_index}, ctl[2]
+        elseif head == TAG_DELAY then
+            local iterator = ctl[2]
+            local state = ctl[3]
+
+            local value
+            ctl_inner_index, value = iterator(state)
+            if not ctl_inner_index then
+                goto next
+            end
+            return {ctl_index, ctl_inner_index}, value
+        else
+            return {ctl_index}, ctl
+        end
+    end
+end
+
+control.join = function(ctls)
+    return {TAG_DELAY, join_iter, ctls}
 end
 
 control.first = function(ctl)

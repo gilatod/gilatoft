@@ -200,13 +200,6 @@ local function raw_build_predicative_phrase(state, phrase, center)
     local g = build_argument(state, phrase.genitive)
     local o = build_argument(state, phrase.oblique)
 
-    local person = PERSON_MAP[center.detail[3]]
-    if n then
-        n[#n+1] = person
-    else
-        n = {"any", person}
-    end
-
     local cmd_t = 0
     if n then cmd_t = max(cmd_t, COMMAND_TYPES[n[1]]) end
     if a then cmd_t = max(cmd_t, COMMAND_TYPES[a[1]]) end
@@ -225,13 +218,28 @@ local function raw_build_predicative_phrase(state, phrase, center)
         arguments = {n = n, a = a, d = d, g = g, o = o} 
     end
 
+
+    local person
+
     if center.type then
+        person = PERSON_MAP[center.detail[3]]
         center = center.root
     else
+        local raw_person = center[1].detail[3]
+        person = PERSON_MAP[raw_person]
         for i = 1, #center do
             local pred = center[i]
             center[i] = pred.root
+            if pred.detail[3] ~= raw_person then
+                assembler_error(nil, "inconsistent personal mark found")
+            end
         end
+    end
+
+    if n then
+        n[#n+1] = person
+    else
+        n = {"any", person}
     end
 
     return {cmd, center, arguments,
