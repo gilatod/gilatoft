@@ -500,7 +500,7 @@ function environment:assert(predicate, arguments, constraints)
         end
     end)
 
-    return success and res
+    return success and res or nil
 end
 
 local function clear(t)

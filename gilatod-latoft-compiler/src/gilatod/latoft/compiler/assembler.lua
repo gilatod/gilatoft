@@ -79,8 +79,52 @@ local ROLE_MAP = {
 }
 
 local build_adjective_phrase
-local build_gerund_phrase
 local build_adverbial_phrase
+local build_genitive_phrase
+local build_gerund_phrase
+
+local function build_argument(state, argument)
+    if not argument then return nil end
+
+    local cmd = "realize"
+    local exp = {0}
+
+    for i = 1, #argument do
+        local comp = argument[i]
+        local comp_t = comp.type
+
+        if comp_t == "adjective_phrase" then
+            exp[#exp+1] = build_adjective_phrase(state, comp)
+        elseif comp_t == "gerund_phrase" then
+            exp[#exp+1] = build_gerund_phrase(state, comp)
+        elseif comp_t == "genitive_phrase" then
+            exp[#exp+1] = build_genitive_phrase(state, comp)
+        else
+            local noun = comp[2]
+            if noun.subtype == "pronoun" then
+                local root = noun.root
+                local entry = PRONOUN_MAP[root]
+                if not entry then
+                    local meta = comp[1]
+                    assembler_error(meta, "unrecognized pronoun '"..noun.raw.."'")
+                end
+                local tag = entry[1]
+                if tag then exp[#exp+1] = tag end
+                cmd = entry[2]
+            else
+                local detail = noun.detail
+                if detail and detail[1] == "role" then
+                    exp[#exp+1] = noun.root..ROLE_MAP[detail[2]]
+                else
+                    exp[#exp+1] = noun.stem
+                end
+            end
+        end
+    end
+
+    exp[1] = cmd
+    return exp
+end
 
 local function build_simple_constraint(state, word)
     local adverb_type = word.detail[2]
@@ -109,47 +153,6 @@ local function build_constraints(state, adverbial)
     return c
 end
 
-local function build_argument(state, argument)
-    if not argument then return nil end
-
-    local cmd = "realize"
-    local exp = {0}
-
-    for i = 1, #argument do
-        local comp = argument[i]
-        local comp_t = comp.type
-
-        if comp_t == "adjective_phrase" then
-            exp[#exp+1] = build_adjective_phrase(state, comp)
-        elseif comp_t == "gerund_phrase" then
-            exp[#exp+1] = build_gerund_phrase(state, comp)
-        else
-            local noun = comp[2]
-            if noun.subtype == "pronoun" then
-                local root = noun.root
-                local entry = PRONOUN_MAP[root]
-                if not entry then
-                    local meta = comp[1]
-                    assembler_error(meta, "unrecognized pronoun '"..noun.raw.."'")
-                end
-                local tag = entry[1]
-                if tag then exp[#exp+1] = tag end
-                cmd = entry[2]
-            else
-                local detail = noun.detail
-                if detail and detail[1] == "role" then
-                    exp[#exp+1] = noun.root..ROLE_MAP[detail[2]]
-                else
-                    exp[#exp+1] = noun.stem
-                end
-            end
-        end
-    end
-
-    exp[1] = cmd
-    return exp
-end
-
 local function raw_build_nonpredicative_phrase(state, phrase, head)
     local nominative = build_argument(state, phrase.nominative)
     local arguments = {
@@ -168,27 +171,30 @@ local function raw_build_nonpredicative_phrase(state, phrase, head)
         arguments = nil
     end
 
-    return {head.root, arguments,
+    return {head, arguments,
         build_constraints(state, phrase.adverbial)}
 end
 
 build_adjective_phrase = function(state, phrase)
     return raw_build_nonpredicative_phrase(
-        state, phrase, phrase.head[2])
+        state, phrase, phrase.head[2].root)
 end
 
 build_adverbial_phrase = function(state, phrase)
     local head = phrase.head[2]
     local exp = raw_build_nonpredicative_phrase(
-        state, phrase, head)
+        state, phrase, head.root)
 
     local adverb_type = head.detail[2]
     if adverb_type == "determinator" then
         local arguments = exp[2]
         arguments.virtual = true
     end
-
     return exp
+end
+
+build_genitive_phrase = function(state, phrase)
+    return {"s.m.", {a = build_argument(state, phrase.genitive)}}
 end
 
 local function raw_build_predicative_phrase(state, phrase, center)

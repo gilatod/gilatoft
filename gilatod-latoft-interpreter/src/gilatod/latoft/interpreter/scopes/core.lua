@@ -63,10 +63,10 @@ core.assert = function(env, exp)
     if type(predicate) == "table" then
         for i = 1, #predicate do
             if not env_assert(env, predicate[i], arguments, constraints) then
-                return pure(false)
+                return nil
             end
         end
-        return pure(true)
+        return nil
     else
         return pure(env_assert(env, predicate, arguments, constraints))
     end

@@ -130,9 +130,10 @@ local read_nonpredicative_phrase
 local function raw_read_token(state, token, upper_phrase)
     local word = token[2]
     local wt = word.type
+    local subtype = word.subtype
 
     if wt == "verb" then
-        if word.subtype == "adverbial" then
+        if subtype == "adverbial" then
             local adverbial = require_table(upper_phrase, "adverbial")
             if word.lexical_aspect[1] == "static" then
                 adverbial[#adverbial+1] = token
@@ -147,33 +148,43 @@ local function raw_read_token(state, token, upper_phrase)
             state.token_index = state.token_index + 1
         end
     elseif wt == "noun" then
-        local case = word.case
-        if case == "genitive" then
-            local genitive = require_table(upper_phrase, "genitive")
-            genitive[#genitive+1] = token
-            state.token_index = state.token_index + 1
-        else
-            local argument = require_table(upper_phrase, case)
+        local result
 
-            if word.subtype == "adjective" then
-                if word.lexical_aspect[1] == "static" then
-                    argument[#argument+1] = token
-                    state.token_index = state.token_index + 1
-                else
-                    argument[#argument+1] = read_nonpredicative_phrase(state, "adjective_phrase")
-                end
-            elseif word.subtype == "gerund" then
-                if word.lexical_aspect[1] == "static" then
-                    argument[#argument+1] = token
-                    state.token_index = state.token_index + 1
-                else
-                    argument[#argument+1] = read_nonpredicative_phrase(state, "gerund_phrase")
-                end
-            else
-                argument[#argument+1] = token
+        if subtype == "adjective" then
+            if word.lexical_aspect[1] == "static" then
+                result = token
                 state.token_index = state.token_index + 1
+            else
+                result = read_nonpredicative_phrase(state, "adjective_phrase")
+            end
+        elseif subtype == "gerund" then
+            if word.lexical_aspect[1] == "static" then
+                result = token
+                state.token_index = state.token_index + 1
+            else
+                result = read_nonpredicative_phrase(state, "gerund_phrase")
+            end
+        else
+            result = token
+            state.token_index = state.token_index + 1
+        end
+
+        local case = word.case
+        local arguments = require_table(upper_phrase, case)
+
+        if case ~= "genitive" then
+            local genitive = upper_phrase.genitive
+            if genitive then
+                arguments[#arguments+1] = {
+                    type = "genitive_phrase",
+                    metadata = genitive[1][1],
+                    genitive = upper_phrase.genitive
+                }
+                upper_phrase.genitive = nil
             end
         end
+
+        arguments[#arguments+1] = result
     else
         error("invalid word")
     end

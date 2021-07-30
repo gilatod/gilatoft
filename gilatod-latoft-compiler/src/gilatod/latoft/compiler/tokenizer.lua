@@ -233,7 +233,7 @@ local NOUN_POSTFIXES = {
     -- semantic role
 
     ["nt"] = {"role", "agent"},
-    ["l"]  = {"role", "patient"},
+    ["r"]  = {"role", "patient"},
     ["m"]  = {"role", "experiencer"},
     ["d"]  = {"role", "scene"},
     ["ft"] = {"role", "measure"},

@@ -30,7 +30,7 @@ local interpreter = interpreter()
 
 local function run(source)
     local assembly, phrases = compiler.compile(source)
-    print(object.show(assembly))
+    --print(object.show(assembly))
     return interpreter:run(assembly)
 end
 
@@ -65,8 +65,23 @@ local function decl_2()
     -- 亚夜是否是虚无的？
     run("Ae'a loema.")
     -- 亚夜死了。
-    show_result(run("Asa Ae'a jata bilatom."))
+    show_result(run("Asa Ae'a jata Ae'u bilatom."))
     -- 亚夜是否是虚无的？
 end
 
-decl_2()
+local function decl_3()
+    run("Latot fema'u fenalar, fema'a jata Juri'o.")
+    -- 如果一位女孩的女朋友存在，这位女孩就是百合。
+    -- 存在(限定) 少女的 女朋友，少女 是 百合
+    run("Via'a jata fema'a.")
+    -- 未亚是女孩。
+    -- 未亚 是 少女
+    run("Via'u fenalar lata.")
+    -- 未亚的女朋友存在。
+    -- 未亚的 女朋友 存在
+    show_result(run("Asa Via'a jata Juri'o."))
+    -- 未亚是否是百合？
+    -- 是否 未亚 是 百合
+end
+
+decl_3()
