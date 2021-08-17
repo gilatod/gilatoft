@@ -1,8 +1,8 @@
 local packages = {
     "gilatod-thirdparty",
     "gilatod-auxiliary",
-    "gilatod-latoft-compiler",
-    "gilatod-latoft-interpreter"
+    "gilatod-gilatoft-compiler",
+    "gilatod-gilatoft-interpreter"
 }
 
 for _, pkg in pairs(packages) do
@@ -18,19 +18,19 @@ local function do_tests()
         package.path = prev_path
     end
 
-    test("gilatod-latoft-compiler")
-    test("gilatod-latoft-interpreter")
+    test("gilatod-gilatoft-compiler")
+    test("gilatod-gilatoft-interpreter")
 end
 
 local object = require("gilatod.auxiliary.object")
-local compiler = require("gilatod.latoft.compiler")
-local interpreter = require("gilatod.latoft.interpreter")
+local compiler = require("gilatod.gilatoft.compiler")
+local interpreter = require("gilatod.gilatoft.interpreter")
 
 local interpreter = interpreter()
 
 local function run(source)
     local assembly, phrases = compiler.compile(source)
-    --print(object.show(assembly))
+    print(object.show(assembly))
     return interpreter:run(assembly)
 end
 
@@ -70,7 +70,7 @@ local function decl_2()
 end
 
 local function decl_3()
-    run("Latot fema'u fenalar, fema'a jata Juri'o.")
+    run("Latot fema'u fenalar, sa fema'a jata Juri'o.")
     -- 如果一位女孩的女朋友存在，这位女孩就是百合。
     -- 存在(限定) 少女的 女朋友，少女 是 百合
     run("Via'a jata fema'a.")
